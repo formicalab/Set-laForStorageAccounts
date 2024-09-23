@@ -88,51 +88,66 @@ $storageAccounts = Import-Csv -Path $CSVFile -Delimiter $delimiter
 Write-Host "Processing $($storageAccounts.Count) storage accounts..."
 $storageAccounts | Foreach-Object -ThrottleLimit 10 -Parallel {
 
-    $currentDiagnosticSettings = Get-AzDiagnosticSetting -ResourceId "$($_.Id)/blobServices/default" -WarningAction SilentlyContinue
-    $ourSettingsAlreadyInUse = (($currentDiagnosticSettings | Where-Object Name -eq $using:diagSettingsName) -ne $null)
+    # define the function to update the diagnostic settings within the parallel block
+     function Update-StorageAccount {
+        param (
+            [string]$Id,
+            [string]$Name,
+            [string]$ServiceName,
+            [string]$DiagSettingsName,
+            [string]$WorkspaceId,
+            [bool]$EnableLogging,
+            [bool]$DisableLogging,
+            [array]$LogCategories
+        )
 
-    if ($null -eq $currentDiagnosticSettings)
-    {
-        if ($using:EnableLogging)
-        {
-            $newDiagnosticSettings = New-AzDiagnosticSetting -ResourceId "$($_.Id)/blobServices/default" -WorkspaceId $using:WorkspaceId -Name $using:diagSettingsName -Log $using:logCategories
-            Write-Host "$($_.name): Our diagnostic Settings have been enabled."
-        }
-        else
-        {
-            Write-Host "$($_.name): No diagnostic settings in use."
-        }
-    }
-    else {
-        if ($using:EnableLogging)
-        {
-            if ($ourSettingsAlreadyInUse)
-            {
-                Write-Host "$($_.name): Our diagnostic settings have been already enabled, nothing to do."
+        $currentBlobDiagnosticSettings = Get-AzDiagnosticSetting -ResourceId "$($Id)/$($ServiceName)" -WarningAction SilentlyContinue
+        $ourSettingsAlreadyInUse = ($null -ne ($currentBlobDiagnosticSettings | Where-Object Name -eq $DiagSettingsName))
+
+        if ($null -eq $currentBlobDiagnosticSettings) {
+            if ($EnableLogging) {
+                $newDiagnosticSettings = New-AzDiagnosticSetting -ResourceId "$Id/$ServiceName" -WorkspaceId $WorkspaceId -Name $DiagSettingsName -Log $LogCategories
+                Write-Host "$($Name)/$($ServiceName): Enabled"
             }
             else {
-                Write-Host "$($_.name): Some diagnostic settings are enabled but not using our configuration. Check manually."
-            }
-        }
-        elseif ($using:DisableLogging)
-        {
-            if ($ourSettingsAlreadyInUse)
-            {
-                Remove-AzDiagnosticSetting -ResourceId "$($_.Id)/blobServices/default" -name $using:diagSettingsName
-                Write-Host "$($_.name): Our diagnostic settings have been disabled."
-            }
-            else {
-                Write-Host "$($_.name): Some diagnostic settings are enabled but not using our configuration. Check manually."
+                Write-Host "$($Name)/$($ServiceName): ---"
             }
         }
         else {
-            if ($ourSettingsAlreadyInUse)
-            {
-                Write-Host "$($_.name): Our diagnostic settings are enabled"
+            if ($EnableLogging) {
+                if ($ourSettingsAlreadyInUse) {
+                    Write-Host "$($Name)/$($ServiceName): Already enabled"
+                }
+                else {
+                    Write-Host "$($Name)/$($ServiceName): Skipped (other settings in use, check manually)"
+                }
+            }
+            elseif ($DisableLogging) {
+                if ($ourSettingsAlreadyInUse) {
+                    Remove-AzDiagnosticSetting -ResourceId "$($Id)/$($ServiceName)" -Name $DiagSettingsName
+                    Write-Host "$($Name)/$($ServiceName): Disabled"
+                }
+                else {
+                    Write-Host "$($Name)/$($ServiceName): Skipped (other settings in use, check manually)"
+                }
             }
             else {
-                Write-Host "$($_.name): Some diagnostic settings are enabled but not using our configuration. Check manually"
+                if ($ourSettingsAlreadyInUse) {
+                    Write-Host "$($Name)/$($ServiceName): Already enabled"
+                }
+                else {
+                    Write-Host "$($Name)/$($ServiceName): Other settings in use"
+                }
             }
         }
     }
+
+    # call the function to update the diagnostic settings for blob services
+    Update-StorageAccount -Id $_.Id -Name $_.Name -ResourceId -ServiceName "blobServices/default" -DiagSettingsName $using:diagSettingsName -WorkspaceId $using:WorkspaceId -EnableLogging $using:EnableLogging -DisableLogging $using:DisableLogging -LogCategories $using:logCategories
+
+    # call the function to update the diagnostic settings for table services
+    Update-StorageAccount -Id $_.Id -Name $_.Name -ResourceId -ServiceName "tableServices/default" -DiagSettingsName $using:diagSettingsName -WorkspaceId $using:WorkspaceId -EnableLogging $using:EnableLogging -DisableLogging $using:DisableLogging -LogCategories $using:logCategories
+
+    # call the function to update the diagnostic settings for table services
+    Update-StorageAccount -Id $_.Id -Name $_.Name -ResourceId -ServiceName "queueServices/default" -DiagSettingsName $using:diagSettingsName -WorkspaceId $using:WorkspaceId -EnableLogging $using:EnableLogging -DisableLogging $using:DisableLogging -LogCategories $using:logCategories
 }
