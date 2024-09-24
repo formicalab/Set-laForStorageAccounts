@@ -150,4 +150,7 @@ $storageAccounts | Foreach-Object -ThrottleLimit 10 -Parallel {
 
     # call the function to update the diagnostic settings for table services
     Update-StorageAccount -Id $_.Id -Name $_.Name -ResourceId -ServiceName "queueServices/default" -DiagSettingsName $using:diagSettingsName -WorkspaceId $using:WorkspaceId -EnableLogging $using:EnableLogging -DisableLogging $using:DisableLogging -LogCategories $using:logCategories
+
+    # call the function to update the diagnostic settings for file services
+    Update-StorageAccount -Id $_.Id -Name $_.Name -ResourceId -ServiceName "fileServices/default" -DiagSettingsName $using:diagSettingsName -WorkspaceId $using:WorkspaceId -EnableLogging $using:EnableLogging -DisableLogging $using:DisableLogging -LogCategories $using:logCategories
 }
